@@ -48,12 +48,42 @@ static inline uint32_t kfifo_len(kfifo_t *fifo)
 }
 ```
 
-🎯 **为啥这能行？** 因为 C 标准规定：无符号整数溢出行为是确定的 📜。`in` 溢出了，`in - out` 差值依然正确！✨
+🎯 **为啥这能行？** C 标准（C99 起）白纸黑字 📜：
 
-| in | out | in - out | 含义 |
-|----|-----|----------|------|
-| 100 | 80 | 20 ✅ | 20 字节数据 |
-| 10 | 0xFFFFFFF0 | 30 ✅ | 刚好溢出，30 字节数据 |
+> *"A computation involving unsigned operands can never overflow, because a result that cannot be represented by the resulting unsigned integer type is reduced modulo the number that is one greater than the largest value that can be represented by the resulting type."*
+>
+> — C99 §6.2.5/9
+
+💬 翻译成人话 👇
+
+无符号整数运算**永不溢出** 🚫💥。结果表示不了怎么办？对 **"最大值 + 1" 取模**。
+
+`uint32_t` 最大值是 `0xFFFFFFFF`，所以模数是 2³²。于是：
+
+```
+0xFFFFFFFF + 1
+= 4294967296 mod 2³²          ← 标准要求取模 📐
+= 0                            ← 自然回绕 🔄
+```
+
+标准只规定了这一条取模规则，"回绕到 0"是它的自然推论 🎓。没有特判，不是编译器仁慈，是数学保证。
+
+🧮 **溢出后 `in - out` 依然正确**：
+
+| in | out | in - out | 推演 | 含义 |
+|----|-----|----------|------|------|
+| 100 | 80 | **20** ✅ | 100 - 80 | 20 字节数据 |
+| 50 | 0xFFFFFF00 | **306** ✅ | (50 + 2³² - 0xFFFFFF00) mod 2³² | 刚好溢出绕回 |
+
+直观理解 🧠：`in` 在 2³² 的环上绕着 `out` 跑 🏃‍♂️💨，差值就是它领先的距离。无论它在环上超了多少圈，数学恒成立 🔐。
+
+```c
+// 💪 有标准兜底，写代码直接莽
+fifo->in += len;   // 随便加，溢出行为确定
+return fifo->in - fifo->out;  // 永远正确
+```
+
+  有符号整数就没这待遇 🌋：`int32_t` 溢出是**未定义行为**，编译器可以删代码、格式化硬盘、召唤 Nasus 🐊。所以 `in` / `out` 必须用 `uint32_t`，不是碰巧。
 
 > 🔮 不需要记"头尾位置"，只需要知道"写了多少、读了多少"，索引通过 `& mask` 随时算出来。干净利落！🧹
 
