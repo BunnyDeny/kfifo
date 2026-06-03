@@ -29,6 +29,7 @@
 *.dylib
 
 # Executables
+kfifo_demo
 *.exe
 *.out
 *.app
